@@ -8,6 +8,7 @@ import { ErrorNotification } from './components/ErrorNotification';
 import { Todo } from './types/Todo';
 import { Status } from './types/Status';
 import { ErrorMessage } from './types/ErrorMessage';
+import { getVisibleTodos } from './utils/getVisibleTodos';
 
 const ERROR_DISPLAY_DURATION = 3000;
 
@@ -25,8 +26,6 @@ export const App: React.FC = () => {
   const [error, setError] = useState<TodoError | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const isAddingRef = useRef(false);
-  const pendingDeletionsRef = useRef(new Set<number>());
 
   useEffect(() => {
     if (!USER_ID) {
@@ -84,10 +83,6 @@ export const App: React.FC = () => {
   };
 
   const handleAdd = async (newTitle: string) => {
-    if (isLoading || isAddingRef.current) {
-      return;
-    }
-
     setError(null);
 
     if (!newTitle) {
@@ -96,8 +91,6 @@ export const App: React.FC = () => {
 
       return;
     }
-
-    isAddingRef.current = true;
 
     setTempTodo({
       id: 0,
@@ -114,17 +107,11 @@ export const App: React.FC = () => {
     } catch {
       setError({ message: ErrorMessage.Add });
     } finally {
-      isAddingRef.current = false;
       setTempTodo(null);
     }
   };
 
   const handleDelete = async (todoId: number) => {
-    if (pendingDeletionsRef.current.has(todoId)) {
-      return;
-    }
-
-    pendingDeletionsRef.current.add(todoId);
     setDeletingIds(currentIds => [...currentIds, todoId]);
     setError(null);
 
@@ -137,8 +124,6 @@ export const App: React.FC = () => {
     } catch {
       setError({ message: ErrorMessage.Delete });
     } finally {
-      pendingDeletionsRef.current.delete(todoId);
-
       setDeletingIds(currentIds => {
         return currentIds.filter(id => id !== todoId);
       });
@@ -149,7 +134,9 @@ export const App: React.FC = () => {
 
   const handleClearCompleted = () => {
     todos
-      .filter(({ completed }) => completed)
+      .filter(({ id, completed }) => {
+        return completed && !deletingIds.includes(id);
+      })
       .forEach(({ id }) => {
         void handleDelete(id);
       });
@@ -166,19 +153,7 @@ export const App: React.FC = () => {
   const hasTodos = todos.length > 0;
   const hasCompletedTodos = todos.some(({ completed }) => completed);
   const allTodosCompleted = hasTodos && activeTodosCount === 0;
-
-  const visibleTodos = todos.filter(({ completed }) => {
-    switch (status) {
-      case Status.Active:
-        return !completed;
-
-      case Status.Completed:
-        return completed;
-
-      default:
-        return true;
-    }
-  });
+  const visibleTodos = getVisibleTodos(todos, status);
 
   return (
     <div className="todoapp">
